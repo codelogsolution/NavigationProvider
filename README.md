@@ -1,7 +1,7 @@
 # react-native-navigation-provider
 
 A simple, lightweight `NavigationProvider` for React Native apps.  
-It is designed to be used **alongside React Navigation** (`@react-navigation/native` and `@react-navigation/stack`) and helps provide a clean, centralized navigation context.
+It is designed to be used **alongside React Navigation** (`@react-navigation/native`, `@react-navigation/stack` and `@react-navigation/bottom-tabs`) and helps provide a clean, centralized navigation context.
 
 ---
 

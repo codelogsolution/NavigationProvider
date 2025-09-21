@@ -1,12 +1,19 @@
-import React from 'react';
+import { JSX, ReactNode } from 'react';
 import { StackNavigationOptions } from '@react-navigation/stack';
+import { BottomTabNavigationOptions } from '@react-navigation/bottom-tabs';
 
-interface NavigationProviderProps {
-  children: React.ReactNode;
-  initialRouteName?: string;
-  screenOptions?: StackNavigationOptions;
+interface ScreenConfig {
+  name?: string;
+  component?: React.ComponentType<any>;
+  type?: 'stack' | 'tab' | 'screen';
+  screens?: ScreenConfig[];
+  options?: StackNavigationOptions | BottomTabNavigationOptions;
 }
 
-export const NavigationProvider: React.FC<NavigationProviderProps>;
+export interface NavigationProviderProps {
+  config: ScreenConfig;
+}
+
+export declare const NavigationProvider: (props: NavigationProviderProps) => JSX.Element;
 
 export default NavigationProvider;
