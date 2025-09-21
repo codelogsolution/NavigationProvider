@@ -24,8 +24,12 @@
     "@types/react-native": "^0.73.0"
   },
   "license": "MIT",
-  "dependencies": {
-    "@react-navigation/native": "^7.1.17",
-    "@react-navigation/stack": "^7.4.8"
-  }
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/codelogsolution/NavigationProvider.git"
+  },
+  "bugs": {
+    "url": "https://github.com/codelogsolution/NavigationProvider/issues"
+  },
+  "homepage": "https://github.com/codelogsolution/NavigationProvider#readme"
 }
