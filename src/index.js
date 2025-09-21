@@ -7,9 +7,10 @@ import { View } from 'react-native';
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
-/**
- * Recursive function to render stacks, tabs, and screens dynamically
- */
+// Wrap nested navigators as valid components
+const wrapNavigator = (renderFn) => () => <>{renderFn()}</>;
+
+// Recursive function to render stacks, tabs, and screens dynamically
 const renderStack = (config) => {
   if (config.type === 'stack') {
     return (
@@ -23,10 +24,9 @@ const renderStack = (config) => {
               <Stack.Screen
                 key={screen.name || `stack${i}`}
                 name={screen.name || `stack${i}`}
+                component={wrapNavigator(() => renderStack(screen))}
                 options={screen.options || {}}
-              >
-                {() => renderStack(screen)}
-              </Stack.Screen>
+              />
             );
           } else {
             return (
@@ -48,15 +48,14 @@ const renderStack = (config) => {
         screenOptions={config.screenOptions || {}}
       >
         {config.screens.map((screen, i) => {
-          if (screen.type === 'stack') {
+          if (screen.type === 'stack' || screen.type === 'tab') {
             return (
               <Tab.Screen
                 key={screen.name || `tab${i}`}
                 name={screen.name || `tab${i}`}
+                component={wrapNavigator(() => renderStack(screen))}
                 options={screen.options || {}}
-              >
-                {() => renderStack(screen)}
-              </Tab.Screen>
+              />
             );
           } else {
             return (
@@ -74,6 +73,7 @@ const renderStack = (config) => {
   }
 };
 
+// Main provider
 export const NavigationProvider = ({ config }) => {
   return <NavigationContainer>{renderStack(config)}</NavigationContainer>;
 };
