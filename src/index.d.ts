@@ -1,7 +1,6 @@
 /* src/index.d.ts */
-import React from 'react';
+import React, { JSX } from 'react';
 import { ComponentType } from 'react';
-import { NavigationContainerRef } from '@react-navigation/native';
 import { StackNavigationOptions } from '@react-navigation/stack';
 import { BottomTabNavigationOptions } from '@react-navigation/bottom-tabs';
 
@@ -19,11 +18,10 @@ export interface NavigationProviderProps {
   config: ScreenConfig;
 }
 
-export declare const NavigationProvider: React.FC<NavigationProviderProps>;
+export declare const NavigationProvider: (props: NavigationProviderProps) => JSX.Element;
 export default NavigationProvider;
 
-export declare const navigationRef: NavigationContainerRef<any>;
-
+export declare const navigationRef: import('@react-navigation/native').NavigationContainerRef<any>;
 export declare function navigateTo(name: string, params?: any): void;
 export declare function navigateToStack(stackName: string): void;
 export declare function navigateNested(rootName: string, nested?: any): void;
