@@ -1,5 +1,5 @@
 /* src/index.d.ts */
-import React from 'react';
+import React, { JSX } from 'react';
 import { ComponentType } from 'react';
 import { StackNavigationOptions } from '@react-navigation/stack';
 import { BottomTabNavigationOptions } from '@react-navigation/bottom-tabs';
