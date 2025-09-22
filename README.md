@@ -21,10 +21,17 @@ It is designed to be used **alongside React Navigation** (`@react-navigation/nat
 ```bash
 npm install react-native-navigation-provider
 
+or 
+
+yarn add react-native-navigation-provider
+
 
 # Required dependencies (recommended)
 npm install react-native-screens react-native-gesture-handler react-native-reanimated
 
+or
+
+yarn add react-native-screens react-native-gesture-handler react-native-reanimated
 
 
 ## Platform setup

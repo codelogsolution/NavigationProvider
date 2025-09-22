@@ -1,4 +1,4 @@
-/* src/index.js */
+/* src/index.js (upgraded) */
 import React from 'react';
 import {
   NavigationContainer,
@@ -15,40 +15,61 @@ const Tab = createBottomTabNavigator();
 /* navigation ref so helpers can act from anywhere */
 const navigationRef = createNavigationContainerRef();
 
-/* map of name -> path (path is array of navigator/screen names to reach it) */
-let screenPathMap = {};
+/* queue for calls made before navigation is ready */
+const pendingActions = [];
+const enqueueOrRun = (fn) => {
+  if (navigationRef.isReady && navigationRef.isReady()) {
+    fn();
+  } else {
+    pendingActions.push(fn);
+  }
+};
+const flushPending = () => {
+  while (pendingActions.length) {
+    const fn = pendingActions.shift();
+    try {
+      fn();
+    } catch (e) {
+      // swallow but log — avoid crashing app init
+      // eslint-disable-next-line no-console
+      console.warn('[NavigationProvider] pending action error', e);
+    }
+  }
+};
 
-/* ---------- Build map: map every node name (navigator or screen) to its path ---------- */
+/* ---------- Build map: map every node name -> first path (or array if duplicates) ---------- */
 const buildScreenPathMap = (config) => {
-  screenPathMap = {};
-
+  const map = {}; // name -> path array OR name -> [path1, path2, ...]
   const walk = (node, parentPath = []) => {
     if (!node) return;
     const currentPath = node.name ? parentPath.concat(node.name) : parentPath;
 
-    // Map this node name to its current path (navigator nodes included)
     if (node.name) {
-      // keep first occurrence if duplicates exist
-      if (!screenPathMap[node.name]) {
-        screenPathMap[node.name] = currentPath.slice();
+      if (!map[node.name]) {
+        map[node.name] = currentPath.slice();
       } else {
-        // optionally you could log duplicates
-        // console.warn(`Duplicate screen/navigator name "${node.name}" - using first occurrence.`);
+        // If duplicate, convert to array of paths (preserve first by default)
+        if (!Array.isArray(map[node.name])) {
+          map[node.name] = [map[node.name], currentPath.slice()];
+        } else {
+          map[node.name].push(currentPath.slice());
+        }
+        // eslint-disable-next-line no-console
+        console.warn(`[NavigationProvider] Duplicate name "${node.name}" registered; using first occurrence by default.`);
       }
     }
 
-    // Walk children if any
     if (Array.isArray(node.screens) && node.screens.length) {
       node.screens.forEach((child) => walk(child, currentPath));
     }
   };
 
   walk(config, []);
+  return map;
 };
 
 /* ---------- Helpers to build nested params / reset routes ---------- */
 const buildNestedParams = (subPath, finalParams) => {
-  // subPath e.g. ['HomeStack','Home']
   if (!subPath || subPath.length === 0) return undefined;
   const [first, ...rest] = subPath;
   if (rest.length === 0) {
@@ -58,7 +79,6 @@ const buildNestedParams = (subPath, finalParams) => {
 };
 
 const buildResetRoutesFromPath = (path, finalParams) => {
-  // path example: ['MainTab','HomeStack','Home']
   if (!path || path.length === 0) return [];
 
   const [root, ...rest] = path;
@@ -68,9 +88,7 @@ const buildResetRoutesFromPath = (path, finalParams) => {
     return [r];
   }
 
-  // recursive builder for nested state
   const stateFor = (sub) => {
-    // sub is like ['HomeStack','Home']
     if (!sub || sub.length === 0) return undefined;
     if (sub.length === 1) {
       const rr = { name: sub[0] };
@@ -86,7 +104,7 @@ const buildResetRoutesFromPath = (path, finalParams) => {
   return [rootRoute];
 };
 
-/* ---------- navigator renderers (recursive) ---------- */
+/* ---------- navigator renderers (unchanged, but safe) ---------- */
 const wrapNavigator = (renderFn) => () => <>{renderFn()}</>;
 
 const renderStack = (config) => {
@@ -146,7 +164,6 @@ const renderStack = (config) => {
     );
   }
 
-  // leaf component
   if (config.component) {
     const Comp = config.component;
     return <Comp />;
@@ -155,86 +172,104 @@ const renderStack = (config) => {
   return null;
 };
 
-/* ---------- NavigationProvider component (build map & render) ---------- */
+/* ---------- NavigationProvider component (memoize map & flush queue) ---------- */
 export const NavigationProvider = ({ config }) => {
-  // Build the map each render (cheap). If needed, memoize on config.
-  buildScreenPathMap(config);
-  return <NavigationContainer ref={navigationRef}>{renderStack(config)}</NavigationContainer>;
+  // memoize map for performance; JSON.stringify is OK for moderate config sizes
+  const screenPathMap = React.useMemo(() => buildScreenPathMap(config), [JSON.stringify(config)]);
+
+  // expose the map to the module-scoped variable used by helpers
+  React.useEffect(() => {
+    // replace module-level map reference
+    moduleScreenMap.set(screenPathMap);
+  }, [screenPathMap]);
+
+  // when navigation becomes ready, flush queued actions
+  const onReady = () => {
+    flushPending();
+  };
+
+  return (
+    <NavigationContainer ref={navigationRef} onReady={onReady}>
+      {renderStack(config)}
+    </NavigationContainer>
+  );
 };
 
 export default NavigationProvider;
 
-/* ---------- exported helpers ---------- */
+/* ---------- module-level holder for current map (so helpers can access latest) ---------- */
+const moduleScreenMap = (() => {
+  let current = {};
+  return {
+    set: (m) => {
+      current = m || {};
+    },
+    get: () => current,
+  };
+})();
+
+/* ---------- exported helpers using the moduleScreenMap ---------- */
 function isReady() {
   return navigationRef && navigationRef.isReady && navigationRef.isReady();
 }
 
-/**
- * navigateTo: navigate to any named navigator or leaf screen registered in config.
- * - If the name refers to a navigator (e.g. 'HomeStack'), this will navigate to its parent (root) and activate it.
- * - If the name refers to a leaf screen (e.g. 'Home'), it will navigate to its root with nested params.
- */
+function _getPathForName(name) {
+  const map = moduleScreenMap.get();
+  const entry = map[name];
+  if (!entry) return null;
+  // if duplicates stored as array return first by default; you can expose API to pick one
+  return Array.isArray(entry) ? entry[0] : entry;
+}
+
 function navigateTo(name, params) {
-  const path = screenPathMap[name];
+  const path = _getPathForName(name);
   if (!path) {
+    // eslint-disable-next-line no-console
     console.warn(`[NavigationProvider] navigateTo: no path found for "${name}"`);
     return;
   }
-  if (!isReady()) return;
-
-  // if root-level
-  if (path.length === 1) {
-    navigationRef.navigate(path[0], params);
-    return;
-  }
-
-  // navigate to root and pass nested params
-  const nested = buildNestedParams(path.slice(1), params);
-  navigationRef.navigate(path[0], nested);
+  enqueueOrRun(() => {
+    if (path.length === 1) {
+      navigationRef.navigate(path[0], params);
+      return;
+    }
+    const nested = buildNestedParams(path.slice(1), params);
+    navigationRef.navigate(path[0], nested);
+  });
 }
 
-/**
- * navigateToStack: convenience alias to navigate to the stack navigator itself (doesn't open a specific leaf)
- * e.g. navigateToStack('HomeStack') -> goes to MainTab -> HomeStack
- */
 function navigateToStack(stackName) {
   return navigateTo(stackName, undefined);
 }
 
-/**
- * navigateNested: call navigationRef.navigate(rootName, nested) directly
- */
 function navigateNested(rootName, nested) {
-  if (!isReady()) return;
-  navigationRef.navigate(rootName, nested);
+  enqueueOrRun(() => {
+    navigationRef.navigate(rootName, nested);
+  });
 }
 
-/**
- * resetToScreen: reset whole nav state to reach this named screen (clear history).
- * This emulates "cross-navigator replace".
- */
 function resetToScreen(name, params) {
-  const path = screenPathMap[name];
+  const path = _getPathForName(name);
   if (!path) {
+    // eslint-disable-next-line no-console
     console.warn(`[NavigationProvider] resetToScreen: no path found for "${name}"`);
     return;
   }
-  if (!isReady()) return;
-  const routes = buildResetRoutesFromPath(path, params);
-  navigationRef.dispatch(
-    CommonActions.reset({
-      index: 0,
-      routes,
-    })
-  );
+  enqueueOrRun(() => {
+    const routes = buildResetRoutesFromPath(path, params);
+    navigationRef.dispatch(
+      CommonActions.reset({
+        index: 0,
+        routes,
+      })
+    );
+  });
 }
 
-/**
- * replaceInCurrent: replace current route in focused navigator (like CommonActions.replace)
- */
 function replaceInCurrent(name, params) {
-  if (!isReady()) return;
-  navigationRef.dispatch(CommonActions.replace(name, params));
+  enqueueOrRun(() => {
+    navigationRef.dispatch(CommonActions.replace(name, params));
+  });
 }
 
 /* exports */
